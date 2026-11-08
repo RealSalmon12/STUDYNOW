@@ -17,9 +17,13 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          # Gradle 배포 서버가 가끔 느리거나 504를 내서 몇 번 다시 시도
-          for i in 1 2 3; do ./gradlew --version && break; echo "retry $i"; sleep 15; done
-          ./gradlew assembleRelease --no-daemon
+          # Gradle/Maven 서버가 가끔 504나 타임아웃을 내서 몇 번 다시 시도
+          # (이미 받은 파일은 캐시에 남아 다음 시도에서 이어감)
+          for i in 1 2 3 4 5; do
+            ./gradlew assembleRelease --no-daemon && exit 0
+            echo "retry $i"; sleep 20
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: FocusLock-android-apk

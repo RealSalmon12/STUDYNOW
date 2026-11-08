@@ -19,9 +19,13 @@ jobs:
           chmod +x gradlew
           # Gradle/Maven 서버가 가끔 504나 타임아웃을 내서 몇 번 다시 시도
           # (이미 받은 파일은 캐시에 남아 다음 시도에서 이어감)
+          # Gradle 배포 파일을 못 받으면 러너에 깔린 gradle로 대신 빌드
+          gradle --version | head -3 || true
           for i in 1 2 3 4 5; do
-            ./gradlew assembleRelease --no-daemon && exit 0
-            echo "retry $i"; sleep 20
+            if ./gradlew --version >/dev/null 2>&1; then G=./gradlew; else G=gradle; fi
+            echo "attempt $i with $G"
+            $G assembleRelease --no-daemon && exit 0
+            sleep 30
           done
           exit 1
       - uses: actions/upload-artifact@v4

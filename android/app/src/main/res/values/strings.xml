@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">공부 집중 잠금</string>
+    <string name="service_name">공부 집중 잠금</string>
+    <string name="service_desc">잠금 시간 동안 허용하지 않은 앱이 열리면 잠금 화면으로 돌려보냅니다. 화면 내용은 읽지 않고, 어떤 앱이 열렸는지만 확인해요.</string>
+</resources>

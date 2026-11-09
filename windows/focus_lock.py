@@ -96,8 +96,95 @@ if IS_WIN:
     import ctypes
     from ctypes import wintypes
 
+    import threading
+
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
+
+    # 화면 배율(125%, 150% 등)을 써도 실제 픽셀 기준으로 화면 전체를 덮기 위해
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor
+    except Exception:
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+    LRESULT = ctypes.c_ssize_t
+    HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+    user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, ctypes.c_void_p, wintypes.DWORD]
+    user32.SetWindowsHookExW.restype = ctypes.c_void_p
+    user32.CallNextHookEx.argtypes = [ctypes.c_void_p, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM]
+    user32.CallNextHookEx.restype = LRESULT
+    kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+    kernel32.GetModuleHandleW.restype = ctypes.c_void_p
+    user32.FindWindowW.restype = wintypes.HWND
+    user32.FindWindowExW.argtypes = [wintypes.HWND, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowExW.restype = wintypes.HWND
+    user32.GetParent.restype = wintypes.HWND
+    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                    ctypes.c_int, ctypes.c_int, wintypes.UINT]
+
+    class KBDLLHOOKSTRUCT(ctypes.Structure):
+        _fields_ = [("vkCode", wintypes.DWORD), ("scanCode", wintypes.DWORD),
+                    ("flags", wintypes.DWORD), ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t)]
+
+    _key_block = {"on": False, "cb": None}
+
+    def _key_proc(n_code, w_param, l_param):
+        if n_code == 0 and _key_block["on"]:
+            kb = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
+            vk = kb.vkCode
+            alt = kb.flags & 0x20
+            ctrl = user32.GetAsyncKeyState(0x11) & 0x8000
+            if vk in (0x5B, 0x5C):                 # 윈도우 키 (왼쪽/오른쪽)
+                return 1
+            if vk == 0x1B and (ctrl or alt):       # Ctrl+Esc(시작 메뉴), Alt+Esc
+                return 1
+            if vk == 0x09 and alt:                 # Alt+Tab
+                return 1
+        return user32.CallNextHookEx(None, n_code, w_param, l_param)
+
+    def set_key_block(on):
+        """윈도우 키, Alt+Tab, Ctrl+Esc 막기 (Ctrl+Alt+Del은 Windows가 막지 못하게 함)"""
+        _key_block["on"] = on
+        if on and _key_block["cb"] is None:
+            cb = HOOKPROC(_key_proc)
+            _key_block["cb"] = cb  # 콜백이 사라지지 않게 보관
+
+            def loop():
+                user32.SetWindowsHookExW(13, cb, kernel32.GetModuleHandleW(None), 0)  # WH_KEYBOARD_LL
+                msg = wintypes.MSG()
+                while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                    user32.TranslateMessage(ctypes.byref(msg))
+                    user32.DispatchMessageW(ctypes.byref(msg))
+
+            threading.Thread(target=loop, daemon=True).start()
+
+    def taskbars():
+        result = []
+        h = user32.FindWindowW("Shell_TrayWnd", None)
+        if h:
+            result.append(h)
+        h = None
+        while True:
+            h = user32.FindWindowExW(None, h, "Shell_SecondaryTrayWnd", None)
+            if not h:
+                break
+            result.append(h)
+        return result
+
+    def show_taskbar(show):
+        for h in taskbars():
+            user32.ShowWindow(h, 5 if show else 0)  # SW_SHOW / SW_HIDE
+
+    def cover_screen(tk_root):
+        """잠금 창을 모든 모니터 크기로 맨 위에 고정"""
+        hwnd = user32.GetParent(tk_root.winfo_id()) or tk_root.winfo_id()
+        x, y, w, h = virtual_screen()
+        user32.SetWindowPos(hwnd, -1, x, y, w, h, 0x0040)  # HWND_TOPMOST, SWP_SHOWWINDOW
+        user32.SetForegroundWindow(hwnd)
     PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     PROCESS_TERMINATE = 0x0001
     STILL_ACTIVE = 259
@@ -223,6 +310,9 @@ else:  # 개발/미리보기용 (Windows가 아니면 차단 기능은 동작하
     def spawn(args): return 0
     def run_single_instance(name): return True
     def mutex_exists(name): return True
+    def set_key_block(on): pass
+    def show_taskbar(show): pass
+    def cover_screen(tk_root): pass
 
 
 # ---------------------------------------------------------------- 감시 프로세스
@@ -366,15 +456,22 @@ class LockWindow:
         root.configure(bg=BG)
         root.protocol("WM_DELETE_WINDOW", lambda: None)
         root.bind_all("<Alt-F4>", lambda e: "break")
-        root.resizable(False, False)
+        root.resizable(True, True)
         vs = virtual_screen()
+        # 이미 떠 있는 창의 테두리를 없애려면 잠깐 숨겼다가 다시 띄워야 함
+        root.withdraw()
         root.overrideredirect(True)
         if vs:
             x, y, w, h = vs
             root.geometry(f"{w}x{h}+{x}+{y}")
         else:
             root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0")
+        root.deiconify()
         root.attributes("-topmost", True)
+        root.update_idletasks()
+        show_taskbar(False)
+        set_key_block(True)
+        cover_screen(root)
 
         center = tk.Frame(root, bg=BG)
         center.place(relx=0.5, rely=0.45, anchor="center")
@@ -460,13 +557,18 @@ class LockWindow:
             minimize(hwnd)
         self.root.attributes("-topmost", True)
         self.root.lift()
+        cover_screen(self.root)
         self.root.focus_force()
 
     def finish(self):
         clear_state()
         set_autostart(False)
+        set_key_block(False)
+        show_taskbar(True)
         self.root.attributes("-topmost", False)
+        self.root.withdraw()
         self.root.overrideredirect(False)
+        self.root.deiconify()
         for w in self.root.winfo_children():
             w.destroy()
         self.root.geometry("420x220")
@@ -488,6 +590,7 @@ def main():
     if state:
         LockWindow(root, state)  # 재부팅/강제종료 후 이어서 잠금
     else:
+        show_taskbar(True)  # 혹시 이전 실행에서 숨겨진 채 끝났으면 복구
         SetupWindow(root)
     root.mainloop()
 

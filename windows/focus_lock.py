@@ -345,6 +345,14 @@ ACCENT = "#7cc4a4"
 FONT = "Malgun Gothic" if IS_WIN else "NanumGothic"
 
 
+UI = {"scale": 1.0}
+
+
+def px(v):
+    """96dpi 기준 픽셀을 현재 화면 배율에 맞게 키움 (125%, 150% 배율 대응)"""
+    return int(round(v * UI["scale"]))
+
+
 def fmt(sec):
     sec = max(0, int(sec))
     h, r = divmod(sec, 3600)
@@ -358,31 +366,31 @@ class SetupWindow:
         self.cfg = load_config()
         root.title("공부 집중 잠금")
         root.configure(bg=BG)
-        root.geometry("520x640")
-        root.resizable(False, False)
+        root.geometry(f"{px(560)}x{px(700)}")
+        root.minsize(px(480), px(600))
 
-        pad = {"padx": 28}
-        tk.Label(root, text="공부 집중 잠금", font=(FONT, 22, "bold"), bg=BG, fg=FG).pack(anchor="w", pady=(26, 2), **pad)
+        pad = {"padx": px(28)}
+        tk.Label(root, text="공부 집중 잠금", font=(FONT, 22, "bold"), bg=BG, fg=FG).pack(anchor="w", pady=(px(26), px(2)), **pad)
         tk.Label(root, text="시작하면 정한 시간이 끝날 때까지 절대 풀 수 없어요.",
                  font=(FONT, 10), bg=BG, fg=DIM).pack(anchor="w", **pad)
 
         # 시간
         box = tk.Frame(root, bg=BG)
-        box.pack(anchor="w", pady=(22, 4), **pad)
+        box.pack(anchor="w", pady=(px(22), px(4)), **pad)
         tk.Label(box, text="잠금 시간 (분)", font=(FONT, 11, "bold"), bg=BG, fg=FG).pack(anchor="w")
         row = tk.Frame(box, bg=BG)
-        row.pack(anchor="w", pady=6)
+        row.pack(anchor="w", pady=px(6))
         self.minutes = tk.StringVar(value=str(self.cfg["minutes"]))
         tk.Entry(row, textvariable=self.minutes, width=6, font=(FONT, 16), justify="center",
-                 bg=CARD, fg=FG, insertbackground=FG, relief="flat").pack(side="left", ipady=4)
+                 bg=CARD, fg=FG, insertbackground=FG, relief="flat").pack(side="left", ipady=px(4))
         for m in (25, 50, 90, 120):
             tk.Button(row, text=f"{m}분", font=(FONT, 10), bg=CARD, fg=FG, relief="flat",
                       activebackground=ACCENT, command=lambda m=m: self.minutes.set(str(m))
-                      ).pack(side="left", padx=(8, 0), ipady=4, ipadx=6)
+                      ).pack(side="left", padx=(px(8), px(0)), ipady=px(4), ipadx=px(6))
 
         # 허용 앱
         tk.Label(root, text="허용 앱 (한 줄에 하나: 이름 | 실행파일.exe | 실행 경로)",
-                 font=(FONT, 11, "bold"), bg=BG, fg=FG).pack(anchor="w", pady=(18, 4), **pad)
+                 font=(FONT, 11, "bold"), bg=BG, fg=FG).pack(anchor="w", pady=(px(18), px(4)), **pad)
         self.allowed = tk.Text(root, height=6, font=("Consolas", 10), bg=CARD, fg=FG,
                                insertbackground=FG, relief="flat", wrap="none")
         self.allowed.pack(fill="x", **pad)
@@ -390,7 +398,7 @@ class SetupWindow:
             f'{a["name"]} | {a["exe"]} | {a["launch"]}' for a in self.cfg["allowed_apps"]))
 
         tk.Label(root, text="잠금 중 실행하면 바로 꺼질 앱 (쉼표로 구분)",
-                 font=(FONT, 11, "bold"), bg=BG, fg=FG).pack(anchor="w", pady=(16, 4), **pad)
+                 font=(FONT, 11, "bold"), bg=BG, fg=FG).pack(anchor="w", pady=(px(16), px(4)), **pad)
         self.blocked = tk.Text(root, height=4, font=("Consolas", 10), bg=CARD, fg=FG,
                                insertbackground=FG, relief="flat")
         self.blocked.pack(fill="x", **pad)
@@ -398,9 +406,9 @@ class SetupWindow:
 
         tk.Button(root, text="잠금 시작", font=(FONT, 14, "bold"), bg=ACCENT, fg="#0b0d10",
                   relief="flat", activebackground="#9fd9bf", command=self.start
-                  ).pack(fill="x", pady=(24, 8), ipady=8, **pad)
+                  ).pack(fill="x", pady=(px(24), px(8)), ipady=px(8), **pad)
         tk.Label(root, text="작업 관리자·명령 프롬프트도 잠금 중엔 막혀요. 컴퓨터를 껐다 켜도 남은 시간부터 다시 잠겨요.",
-                 font=(FONT, 9), bg=BG, fg=DIM, wraplength=460, justify="left").pack(anchor="w", **pad)
+                 font=(FONT, 9), bg=BG, fg=DIM, wraplength=px(460), justify="left").pack(anchor="w", **pad)
 
     def parse(self):
         minutes = int(self.minutes.get().strip())
@@ -477,21 +485,21 @@ class LockWindow:
         center.place(relx=0.5, rely=0.45, anchor="center")
         tk.Label(center, text="집중 시간", font=(FONT, 18), bg=BG, fg=DIM).pack()
         self.clock = tk.Label(center, text=fmt(self.remaining), font=(FONT, 96, "bold"), bg=BG, fg=FG)
-        self.clock.pack(pady=(4, 6))
-        self.bar = tk.Canvas(center, width=520, height=6, bg=CARD, highlightthickness=0)
-        self.bar.pack(pady=(0, 30))
+        self.clock.pack(pady=(px(4), px(6)))
+        self.bar = tk.Canvas(center, width=px(520), height=px(6), bg=CARD, highlightthickness=0)
+        self.bar.pack(pady=(px(0), px(30)))
         self.total = self.cfg["minutes"] * 60
 
         if self.cfg["allowed_apps"]:
-            tk.Label(center, text="쓸 수 있는 앱", font=(FONT, 11), bg=BG, fg=DIM).pack(pady=(0, 8))
+            tk.Label(center, text="쓸 수 있는 앱", font=(FONT, 11), bg=BG, fg=DIM).pack(pady=(px(0), px(8)))
             row = tk.Frame(center, bg=BG)
             row.pack()
             for a in self.cfg["allowed_apps"]:
                 tk.Button(row, text=a["name"], font=(FONT, 12), bg=CARD, fg=FG, relief="flat",
                           activebackground=ACCENT, command=lambda a=a: self.open_app(a)
-                          ).pack(side="left", padx=6, ipadx=14, ipady=6)
+                          ).pack(side="left", padx=px(6), ipadx=px(14), ipady=px(6))
         self.msg = tk.Label(center, text="", font=(FONT, 10), bg=BG, fg=DIM)
-        self.msg.pack(pady=(14, 0))
+        self.msg.pack(pady=(px(14), px(0)))
         self.root.after(self.TICK_MS, self.tick)
 
     def open_app(self, app):
@@ -520,7 +528,7 @@ class LockWindow:
         self.clock.config(text=fmt(self.remaining))
         frac = 1 - self.remaining / max(1, self.total)
         self.bar.delete("all")
-        self.bar.create_rectangle(0, 0, 520 * frac, 6, fill=ACCENT, width=0)
+        self.bar.create_rectangle(0, 0, px(520) * frac, px(6), fill=ACCENT, width=0)
 
         if now - self.last_save > 5:
             self.last_save = now
@@ -571,12 +579,12 @@ class LockWindow:
         self.root.deiconify()
         for w in self.root.winfo_children():
             w.destroy()
-        self.root.geometry("420x220")
-        tk.Label(self.root, text="수고했어요!", font=(FONT, 22, "bold"), bg=BG, fg=FG).pack(pady=(40, 6))
+        self.root.geometry(f"{px(420)}x{px(220)}")
+        tk.Label(self.root, text="수고했어요!", font=(FONT, 22, "bold"), bg=BG, fg=FG).pack(pady=(px(40), px(6)))
         tk.Label(self.root, text=f"{self.cfg['minutes']}분 집중 완료. 잠금이 풀렸어요.",
                  font=(FONT, 11), bg=BG, fg=DIM).pack()
         tk.Button(self.root, text="닫기", font=(FONT, 11), bg=ACCENT, fg="#0b0d10", relief="flat",
-                  command=self.root.destroy).pack(pady=24, ipadx=20, ipady=4)
+                  command=self.root.destroy).pack(pady=px(24), ipadx=px(20), ipady=px(4))
         self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
 
@@ -586,6 +594,8 @@ def main():
     if not run_single_instance("Local\\FocusLockMain"):
         return
     root = tk.Tk()
+    UI["scale"] = max(1.0, root.winfo_fpixels("1i") / 96.0)
+    root.tk.call("tk", "scaling", UI["scale"] * 96 / 72)  # 글자도 같은 배율로
     state = load_state()
     if state:
         LockWindow(root, state)  # 재부팅/강제종료 후 이어서 잠금
